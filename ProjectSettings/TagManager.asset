@@ -5,6 +5,15 @@ TagManager:
   serializedVersion: 3
   tags:
   - Mineral 1
+<<<<<<< HEAD
+  - Material
+  - Material 1
+  - Jugador
+  - 'Dios '
+=======
+  - Ground
+  - PlayerCamera
+>>>>>>> b5f36093d7ce31adb5cd7c0abb9abd3150ea9119
   layers:
   - Default
   - TransparentFX
@@ -12,7 +21,7 @@ TagManager:
   - 
   - Water
   - UI
-  - 
+  - Ground
   - 
   - 
   - 

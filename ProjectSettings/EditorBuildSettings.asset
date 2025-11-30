@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Arturo.unity
     guid: 9656ad58358653b45b802d1a38564a8a
+  - enabled: 1
+    path: Assets/Scenes/Bolita.unity
+    guid: b9fd2c6cb0d34b041bd12b81f23ce6ae
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   m_UseUCBPForAssetBundles: 0
