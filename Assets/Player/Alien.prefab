@@ -131,18 +131,16 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1174082833692710352}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 33071d0170d747a4abd88111eeb464f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
   ShowTopMostFoldoutHeaderGroup: 1
-  rotationSpeed: 100
-  rotationAxis: {x: 0, y: 0, z: 1}
-  attractionForce: 10
-  jumpForce: 5
-  materialTag: Material 1
+  materialTag: Mineral 1
   counterUIText: {fileID: 0}
+  mineAnimDuration: 0.2
+  mineAnimIntensity: 0.1
 --- !u!50 &5131473203213111351
 Rigidbody2D:
   serializedVersion: 5

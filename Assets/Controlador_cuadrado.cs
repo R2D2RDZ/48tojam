@@ -1,243 +1,133 @@
 using UnityEngine;
 using TMPro;
-using System.Collections; 
-using UnityEngine.UI;
+using System.Collections;
+using Unity.Netcode;
 
-// Regla: Heredamos de NetworkBehaviour para tener acceso a IsOwner
-[RequireComponent(typeof(Rigidbody2D))]
-public class OrbitalPlayerController : NetworkBehaviour
+// Este script ahora solo se encarga de la MINERÍA e INTERACCIÓN.
+// El movimiento lo maneja 'PlanetaryMovementController'.
+public class ControladorOrbital : NetworkBehaviour
 {
-    [Header("Orbital Settings")]
-    [Tooltip("Speed at which the player orbits the center.")]
-    [SerializeField] private float rotationSpeed = -30f;
-
-    // --- Variables de Salto y Atracción ---
-    [Header("Configuración de Salto y Atracción")]
-    public float fuerzaDeAtraccion = 10f; 
-    public float fuerzaDeSalto = 5f;      
-    
-    // --- Variables de Recolección ---
-    [Header("Configuración de Recolección")]
-    public string tagDelMaterial = "Material 1"; 
-    public TMP_Text contadorGlobalUIText; 
-    public float duracionAnimacionGolpe = 0.2f;   
-    public float intensidadAnimacionGolpe = 0.1f; 
-    
-    private int contadorMaterial = 0;          
-    private Rigidbody2D rb;                
-    private bool estaEnSuelo = true;       
-
-    [Header("Jump & Gravity Settings")]
-    [Tooltip("Force pulling the player towards the center (0,0).")]
-    [SerializeField] private float attractionForce = 10f;
-
-    [Tooltip("Force applied when jumping.")]
-    [SerializeField] private float jumpForce = 5f;
-
     [Header("Collection Settings")]
     [Tooltip("Tag required for the collectable objects.")]
-    [SerializeField] private string materialTag = "Material 1";
+    [SerializeField] private string materialTag = "Mineral 1";
 
     [Tooltip("UI Text component to display score.")]
     [SerializeField] private TMP_Text counterUIText;
 
+    [Header("Mining Animation")]
+    [Tooltip("Duration of the mining shake animation.")]
+    [SerializeField] private float mineAnimDuration = 0.2f;
+
+    [Tooltip("Intensity of the mining shake.")]
+    [SerializeField] private float mineAnimIntensity = 0.1f;
+
+    // Estado interno
     private int materialCount = 0;
     private Rigidbody2D rb;
-    private bool isGrounded = true;
+    private bool isMining = false; // Para evitar spammear la tecla Q
 
-    // Usamos OnNetworkSpawn en lugar de Start para inicialización de red
     public override void OnNetworkSpawn()
     {
-        // Regla: Buscar componentes locales
         rb = GetComponent<Rigidbody2D>();
-        if (rb == null)
+
+        // Solo el dueño actualiza su UI inicial
+        if (IsOwner)
         {
-            Debug.LogError("ERROR: El objeto necesita un Rigidbody2D.");
-            return;
-        }
-        
-        rb.constraints = RigidbodyConstraints2D.FreezeRotation; 
-        ActualizarContadorGlobalUI(); 
-        
-        if (contadorGlobalUIText == null)
-        {
-             Debug.LogWarning("Falta asignar el Contador Global UI Text en el Cubo.");
+            UpdateCounterUI();
         }
     }
 
-    void Update()
+    // Usamos OnTriggerStay para detectar si estamos sobre el mineral y presionamos Q
+    private void OnTriggerStay2D(Collider2D other)
     {
-        // El movimiento (Atracción, Salto) solo si NO es kinemático (no está golpeando/animando).
-        if (!rb.isKinematic) 
-        {
-            // Lógica de Atracción Radial
-            if (centro != null)
-            {
-                Vector2 direccionHaciaCentro = ((Vector2)centro.position - (Vector2)transform.position).normalized;
-                rb.AddForce(direccionHaciaCentro * fuerzaDeAtraccion);
-            }
+        // 1. Regla: Solo el dueño puede iniciar la acción
+        if (!IsOwner) return;
 
-            // Lógica de Salto (Input)
-            if (Input.GetKeyDown(KeyCode.Space) && estaEnSuelo)
+        // 2. Si ya estamos minando, no hacemos nada
+        if (isMining) return;
+
+        // 3. Verificamos el Tag
+        if (other.CompareTag(materialTag))
+        {
+            // Intentamos obtener el script del mineral (asumiendo que existe según tu código anterior)
+            RecursoMineral resource = other.GetComponent<RecursoMineral>();
+
+            // 4. Input 'Q' y validación del recurso
+            if (Input.GetKey(KeyCode.Q) && resource != null && !resource.EstaRecargando())
             {
-                Saltar(); 
+                // Iniciamos la secuencia de minado
+                StartCoroutine(MiningSequence(resource));
             }
         }
     }
 
-    private void Update()
+    private IEnumerator MiningSequence(RecursoMineral resource)
     {
-        // La órbita solo si NO es kinemático.
-        if (!rb.isKinematic)
-        {
-            float inputHorizontal = Input.GetAxis("Horizontal"); 
-            if (inputHorizontal != 0 && centro != null)
-            {
-                Vector3 puntoPivot = centro.position; 
-                float anguloARotar = inputHorizontal * velocidadDeRotacion * Time.deltaTime;
-                transform.RotateAround(puntoPivot, ejeDeRotacion, anguloARotar);
-            }
-        }
-        
-        // Alineación Radial (Siempre se ejecuta)
-        if (centro != null)
-        {
-            PerformJump();
-        }
-    }
-    
-    // LÓGICA DE INTERACCIÓN CON EL MINERAL
-    void OnTriggerStay2D(Collider2D other)
-    {
-        if (centro == null) return;
-        
-        RecursoMineral recurso = other.GetComponent<RecursoMineral>();
+        isMining = true;
 
-        if (recurso != null && other.CompareTag(tagDelMaterial))
-        {
-            // Solo pica si presionamos 'Q' y si el mineral está disponible.
-            // La comprobación de !rb.isKinematic es crucial aquí.
-            if (Input.GetKeyDown(KeyCode.Q) && !rb.isKinematic && !recurso.EstaRecargando())
-            {
-                Vector3 posicionRadialInicial = transform.position - centro.position;
-                
-                // 1. Inicia la animación de OSCILACIÓN (y bloquea el movimiento)
-                StartCoroutine(AnimarGolpeRecoleccion(posicionRadialInicial));
-                
-                // 2. Llama al mineral para que inicie su contador de 4 segundos
-                recurso.IniciarPicado(this); 
-            }
-        }
-    }
-    
-    // Corrutina para la animación de OSCILACIÓN (entra y sale radialmente)
-    private IEnumerator AnimarGolpeRecoleccion(Vector3 posicionRadialInicial)
-    {
-        // 1. Bloquear y detener el movimiento físico
-        rb.linearVelocity = Vector2.zero;
-        rb.angularVelocity = 0f;
-        rb.isKinematic = true; // ⬅️ CRUCIAL: Bloquea la física para permitir la oscilación forzada
-        
-        // Asegurar la posición base antes de iniciar el ciclo
-        transform.position = centro.position + posicionRadialInicial; 
-        
-        float tiempoTranscurrido = 0f;
-        
-        while (tiempoTranscurrido < duracionAnimacionGolpe)
-        {
-            float tiempoNormalizado = tiempoTranscurrido / duracionAnimacionGolpe;
-            
-            // Crea el movimiento suave de ida y vuelta (0 -> 1 -> 0)
-            float offset = Mathf.Sin(tiempoNormalizado * Mathf.PI) * intensidadAnimacionGolpe; 
-            
-            // Multiplica el offset por la dirección radial (transform.up)
-            Vector3 offsetVector = transform.up * offset; 
-            
-            // 2. FORZAR POSICIÓN: Mueve el cubo a la posición base + la oscilación
-            transform.position = centro.position + posicionRadialInicial + offsetVector;
+        // A. Guardamos estado físico previo
+        // Al ponerlo Kinematic, el script de Movimiento (PlanetaryMovement) dejará de afectarlo
+        // porque el Rigidbody ignorará las fuerzas.
+        bool wasKinematic = rb.isKinematic;
+        rb.isKinematic = true;
+        rb.linearVelocity = Vector2.zero; // Detener al jugador
 
-            tiempoTranscurrido += Time.deltaTime;
+        // B. Calcular posición base relativa al centro (0,0) para la animación
+        // Asumimos que el centro del mundo es Vector3.zero
+        Vector3 center = Vector3.zero;
+        Vector3 initialRadialPos = transform.position - center;
+
+        // C. Animación de oscilación (Golpe)
+        float elapsedTime = 0f;
+        while (elapsedTime < mineAnimDuration)
+        {
+            float normalizedTime = elapsedTime / mineAnimDuration;
+
+            // Movimiento de entrada y salida (Sinusoide)
+            float offset = Mathf.Sin(normalizedTime * Mathf.PI) * mineAnimIntensity;
+
+            // Calculamos dirección hacia arriba (radial hacia afuera)
+            Vector3 offsetVector = transform.up * offset;
+
+            // Aplicamos posición forzada
+            transform.position = center + initialRadialPos + offsetVector;
+
+            elapsedTime += Time.deltaTime;
             yield return null;
         }
 
-        // 3. Regresar a la posición exacta y devolver el control a la física
-        transform.position = centro.position + posicionRadialInicial;
-        rb.isKinematic = false; // ⬅️ DESBLOQUEO: Devuelve el control para la órbita/salto
+        // D. Restaurar posición exacta
+        transform.position = center + initialRadialPos;
+
+        // E. Restaurar físicas
+        rb.isKinematic = wasKinematic;
+
+        // F. Notificar al recurso (Lógica externa)
+        // Nota: resource.IniciarPicado(this) debería manejar la lógica de "reducir vida" del mineral
+        resource.IniciarPicado(this);
+
+        // G. Si el recurso se rompió (opcional, depende de tu lógica en RecursoMineral),
+        // sumamos puntos. Aquí asumo que RecursoMineral te llamará de vuelta a 'RecolectarCompletado'
+        // o si es instantáneo, lo sumamos aquí.
+
+        // Pequeña pausa para no spammear
+        yield return new WaitForSeconds(0.1f);
+
+        isMining = false;
     }
 
-    // Este método es llamado por el MINERAL (RecursoMineral) después de cada golpe de 4s.
+    // Este método es llamado por el script externo 'RecursoMineral' cuando se completa la extracción
     public void RecolectarCompletado()
     {
-        contadorMaterial++;
-        ActualizarContadorGlobalUI();
-    }
-    
-    private void ActualizarContadorGlobalUI()
-    {
-        if (contadorGlobalUIText != null)
-        {
-            contadorGlobalUIText.text = "Material: " + contadorMaterial.ToString();
-        }
-    }
-    
-    private void Saltar()
-    {
-        Vector2 direccionDeSalto = transform.up; 
-        rb.linearVelocity = Vector2.zero; 
-        rb.AddForce(direccionDeSalto * fuerzaDeSalto, ForceMode2D.Impulse);
-        estaEnSuelo = false; 
-    }
-
-    void OnCollisionEnter2D(Collision2D collision)
-    {
-        if (centro == null) return;
-
-        foreach (ContactPoint2D contacto in collision.contacts)
-        {
-            Vector2 direccionDesdeCentro = ((Vector2)transform.position - (Vector2)centro.position).normalized;
-            
-            if (Vector2.Dot(contacto.normal, direccionDesdeCentro) > 0.9f)
-            {
-                estaEnSuelo = true;
-                break;
-            }
-        }
-    }
-
-    // --- COLLECTION LOGIC ---
-
-    private void OnTriggerStay2D(Collider2D other)
-    {
-        if (!IsOwner) return;
-
-        if (other.CompareTag(materialTag))
-        {
-            if (Input.GetKeyDown(KeyCode.Q))
-            {
-                // En Multiplayer real, destruir un objeto requiere un ServerRpc.
-                // Por ahora, lo mantendremos simple, pero ten en cuenta que 
-                // destruir el objeto aquí solo lo borrará visualmente si no tiene NetworkObject.
-                CollectMaterial(other.gameObject);
-            }
-        }
-    }
-
-    private void CollectMaterial(GameObject material)
-    {
-        // IMPORTANTE: Si el 'material' tiene NetworkObject, debes despawnearlo via ServerRpc.
-        // Si es un objeto local decorativo, Destroy funciona bien.
-        Destroy(material);
-
         materialCount++;
         UpdateCounterUI();
     }
 
     private void UpdateCounterUI()
     {
-        // Verificación extra: Solo actualizar UI si existe y somos el jugador local
         if (counterUIText != null && IsOwner)
         {
-            counterUIText.text = materialCount.ToString();
+            counterUIText.text = "Material: " + materialCount.ToString();
         }
     }
 }
