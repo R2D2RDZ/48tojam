@@ -1,0 +1,58 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &7427099492907259782
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5051054428258101723}
+  - component: {fileID: 6685153930007824557}
+  m_Layer: 0
+  m_Name: Dios
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5051054428258101723
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7427099492907259782}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 34.38, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6685153930007824557
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7427099492907259782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 649ae57fcb074374c9b61e3e7aa007f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  velocidadDeRotacionDios: 150
+  ejeDeRotacion: {x: 0, y: 0, z: 1}
+  habilidadActual: 0
+  tiempoEntreHabilidades: 4
+  prefabPared: {fileID: 1131478745461018701, guid: b862804be16a5fe40884033dd246ace3, type: 3}
+  distanciaMaxima: 8
+  danoRayo: 30
+  rangoRayo: 3
+  prefabRayoFigura: {fileID: 7174602572535871584, guid: 475ce0ce926a39c40975b1b9c10321b0, type: 3}
+  prefabMaterialPerdido: {fileID: 0}
+  centro: {fileID: 0}
+  tagObjetivo: Jugador
