@@ -5,6 +5,8 @@ TagManager:
   serializedVersion: 3
   tags:
   - Mineral 1
+  - Ground
+  - PlayerCamera
   layers:
   - Default
   - TransparentFX
@@ -12,7 +14,7 @@ TagManager:
   - 
   - Water
   - UI
-  - 
+  - Ground
   - 
   - 
   - 

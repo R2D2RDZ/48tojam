@@ -1,131 +1,169 @@
 using UnityEngine;
-using UnityEngine.UI; 
-using TMPro; // NECESARIO para el tipo TMP_Text
+using Unity.Netcode;
+using TMPro;
 
-public class ControladorOrbital : MonoBehaviour
+// Regla: Heredamos de NetworkBehaviour para tener acceso a IsOwner
+[RequireComponent(typeof(Rigidbody2D))]
+public class OrbitalPlayerController : NetworkBehaviour
 {
-    // --- Variables de Órbita ---
-    [Header("Configuración de Órbita")]
-    public Transform centro;              
-    public float velocidadDeRotacion = 100f; 
-    public Vector3 ejeDeRotacion = Vector3.forward; 
+    [Header("Orbital Settings")]
+    [Tooltip("Speed at which the player orbits the center.")]
+    [SerializeField] private float rotationSpeed = -30f;
 
-    // --- Variables de Salto y Atracción ---
-    [Header("Configuración de Salto y Atracción")]
-    public float fuerzaDeAtraccion = 10f; 
-    public float fuerzaDeSalto = 5f;      
-    
-    // --- Variables de Recolección ---
-    [Header("Configuración de Recolección")]
-    public string tagDelMaterial = "Material 1"; 
-    public TMP_Text contadorUIText;              
-    private int contadorMaterial = 0;          
-    
-    private Rigidbody2D rb;                
-    private bool estaEnSuelo = true;       
+    [Tooltip("Axis used for rotation.")]
+    [SerializeField] private Vector3 rotationAxis = Vector3.forward;
 
-    void Start()
+    [Header("Jump & Gravity Settings")]
+    [Tooltip("Force pulling the player towards the center (0,0).")]
+    [SerializeField] private float attractionForce = 10f;
+
+    [Tooltip("Force applied when jumping.")]
+    [SerializeField] private float jumpForce = 5f;
+
+    [Header("Collection Settings")]
+    [Tooltip("Tag required for the collectable objects.")]
+    [SerializeField] private string materialTag = "Material 1";
+
+    [Tooltip("UI Text component to display score.")]
+    [SerializeField] private TMP_Text counterUIText;
+
+    private int materialCount = 0;
+    private Rigidbody2D rb;
+    private bool isGrounded = true;
+
+    // Usamos OnNetworkSpawn en lugar de Start para inicialización de red
+    public override void OnNetworkSpawn()
     {
+        // Regla: Buscar componentes locales
         rb = GetComponent<Rigidbody2D>();
-        if (rb == null)
-        {
-            Debug.LogError("ERROR: El objeto necesita un Rigidbody2D.");
-            return;
-        }
-        
-        rb.constraints = RigidbodyConstraints2D.FreezeRotation; 
-        ActualizarContadorUI(); 
-    }
 
-    void Update()
-    {
-        // Lógica de Atracción Radial
-        if (centro != null)
-        {
-            Vector2 direccionHaciaCentro = ((Vector2)centro.position - (Vector2)transform.position).normalized;
-            rb.AddForce(direccionHaciaCentro * fuerzaDeAtraccion);
-        }
+        // Configuración crítica para evitar rotaciones locas por física
+        rb.constraints = RigidbodyConstraints2D.FreezeRotation;
 
-        // Lógica de Salto (Input)
-        if (Input.GetKeyDown(KeyCode.Space) && estaEnSuelo)
+        // Solo el dueño debe actualizar su propia UI local
+        if (IsOwner)
         {
-            Saltar(); 
+            UpdateCounterUI();
         }
     }
 
-    void LateUpdate()
+    private void Update()
     {
-        // Lógica de Órbita
-        float inputHorizontal = Input.GetAxis("Horizontal"); 
+        // --- REGLA DE ORO MULTIPLAYER ---
+        // Si NO soy el dueño de este objeto, no proceso inputs ni fuerzas locales.
+        if (!IsOwner) return;
 
-        if (inputHorizontal != 0 && centro != null)
-        {
-            Vector3 puntoPivot = centro.position; 
-            float anguloARotar = inputHorizontal * velocidadDeRotacion * Time.deltaTime;
-            transform.RotateAround(puntoPivot, ejeDeRotacion, anguloARotar);
-        }
+        HandleGravity();
+        HandleJumpInput();
+    }
 
-        // Alineación Radial (Fix de Salto)
-        if (centro != null)
+    private void LateUpdate()
+    {
+        // También bloqueamos el movimiento orbital si no somos el dueño
+        if (!IsOwner) return;
+
+        HandleOrbitalMovement();
+        HandleRadialAlignment();
+    }
+
+    private void HandleGravity()
+    {
+        // Atracción hacia el centro (0,0)
+        Vector2 directionToCenter = (Vector2.zero - (Vector2)transform.position).normalized;
+        rb.AddForce(directionToCenter * attractionForce);
+    }
+
+    private void HandleJumpInput()
+    {
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
         {
-            Vector2 direccionDesdeCentro = (transform.position - centro.position).normalized;
-            float angulo = Mathf.Atan2(direccionDesdeCentro.y, direccionDesdeCentro.x) * Mathf.Rad2Deg - 90f;
-            transform.rotation = Quaternion.Euler(new Vector3(0, 0, angulo));
+            PerformJump();
         }
     }
-    
-    // ===================================
-    // 3. LÓGICA DE RECOLECCIÓN (MÉTODO REINCORPORADO)
-    // ===================================
-    void OnTriggerStay2D(Collider2D other)
+
+    private void HandleOrbitalMovement()
     {
-        // Verifica el Tag y el Input 'Q'
-        if (other.CompareTag(tagDelMaterial))
+        float horizontalInput = Input.GetAxis("Horizontal");
+
+        if (Mathf.Abs(horizontalInput) > 0.01f)
+        {
+            // RotateAround modifica el Transform directamente
+            transform.RotateAround(Vector3.zero, rotationAxis, horizontalInput * rotationSpeed * Time.deltaTime);
+        }
+    }
+
+    private void HandleRadialAlignment()
+    {
+        // Mantiene los pies apuntando al centro
+        Vector2 directionFromCenter = (transform.position - Vector3.zero).normalized;
+        float angle = Mathf.Atan2(directionFromCenter.y, directionFromCenter.x) * Mathf.Rad2Deg - 90f;
+        transform.rotation = Quaternion.Euler(0, 0, angle);
+    }
+
+    private void PerformJump()
+    {
+        // Resetear velocidad lineal (Unity 6 API) para salto consistente
+        rb.linearVelocity = Vector2.zero;
+
+        Vector2 jumpDirection = transform.up;
+        rb.AddForce(jumpDirection * jumpForce, ForceMode2D.Impulse);
+        isGrounded = false;
+    }
+
+    // --- COLLISION LOGIC ---
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        // La física corre en todos lados, pero solo queremos cambiar estado lógico si somos dueños
+        if (!IsOwner) return;
+
+        foreach (ContactPoint2D contact in collision.contacts)
+        {
+            Vector2 directionFromCenter = ((Vector2)transform.position - Vector2.zero).normalized;
+
+            // Verificamos si la normal del contacto apunta hacia afuera (suelo)
+            if (Vector2.Dot(contact.normal, directionFromCenter) > 0.9f)
+            {
+                isGrounded = true;
+                break;
+            }
+        }
+    }
+
+    // --- COLLECTION LOGIC ---
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        if (!IsOwner) return;
+
+        if (other.CompareTag(materialTag))
         {
             if (Input.GetKeyDown(KeyCode.Q))
             {
-                RecolectarMaterial(other.gameObject);
+                // En Multiplayer real, destruir un objeto requiere un ServerRpc.
+                // Por ahora, lo mantendremos simple, pero ten en cuenta que 
+                // destruir el objeto aquí solo lo borrará visualmente si no tiene NetworkObject.
+                CollectMaterial(other.gameObject);
             }
         }
     }
-    
-    private void RecolectarMaterial(GameObject material)
+
+    private void CollectMaterial(GameObject material)
     {
-        contadorMaterial++;
-        ActualizarContadorUI();
+        // IMPORTANTE: Si el 'material' tiene NetworkObject, debes despawnearlo via ServerRpc.
+        // Si es un objeto local decorativo, Destroy funciona bien.
         Destroy(material);
-    }
-    
-    private void ActualizarContadorUI()
-    {
-        if (contadorUIText != null)
-        {
-            contadorUIText.text = contadorMaterial.ToString();
-        }
-    }
-    
-    private void Saltar()
-    {
-        Vector2 direccionDeSalto = transform.up; 
-        // CORRECCIÓN DE API: Usar rb.velocity
-        rb.linearVelocity = Vector2.zero; 
-        rb.AddForce(direccionDeSalto * fuerzaDeSalto, ForceMode2D.Impulse);
-        estaEnSuelo = false; 
+
+        materialCount++;
+        UpdateCounterUI();
     }
 
-    void OnCollisionEnter2D(Collision2D collision)
+    private void UpdateCounterUI()
     {
-        if (centro == null) return;
-
-        foreach (ContactPoint2D contacto in collision.contacts)
+        // Verificación extra: Solo actualizar UI si existe y somos el jugador local
+        if (counterUIText != null && IsOwner)
         {
-            Vector2 direccionDesdeCentro = ((Vector2)transform.position - (Vector2)centro.position).normalized;
-            
-            if (Vector2.Dot(contacto.normal, direccionDesdeCentro) > 0.9f)
-            {
-                estaEnSuelo = true;
-                break;
-            }
+            counterUIText.text = materialCount.ToString();
         }
     }
 }
