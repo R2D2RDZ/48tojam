@@ -1,21 +1,30 @@
 using UnityEngine;
 
 [RequireComponent(typeof(LineRenderer))]
-public class CircularTextureRenderer : MonoBehaviour
+public class ArcTextureRenderer : MonoBehaviour
 {
-    [Header("Circle Settings")]
-    [Tooltip("Number of segments to make the circle smooth. Higher is smoother.")]
+    [Header("Arc Geometry Settings")]
+    [Tooltip("Angle in degrees where the arc begins (e.g., 0).")]
+    [SerializeField] private float startAngle = 0f;
+
+    [Tooltip("Angle in degrees where the arc ends (e.g., 180).")]
+    [SerializeField] private float endAngle = 180f;
+
+    [Tooltip("Number of segments between start and end. Higher values = smoother curve.")]
     [SerializeField] private int segments = 60;
 
-    [Tooltip("Radius of the circle in world units.")]
+    [Tooltip("Radius of the arc in local units.")]
     [SerializeField] private float radius = 5f;
 
     [Tooltip("Width of the line renderer.")]
     [SerializeField] private float lineWidth = 1f;
 
-    [Header("Texture Settings")]
-    [Tooltip("How many times the texture repeats around the circle.")]
-    [SerializeField] private float textureTilingMultiplier = 1f;
+    [Header("Texture Adjustment")]
+    [Tooltip("How many times the texture repeats along the LENGTH of the arc.")]
+    [SerializeField] private float textureTilingX = 1f;
+
+    [Tooltip("Controls the vertical scale. Increase this if the texture looks stretched vertically on thick lines.")]
+    [SerializeField] private float textureTilingY = 1f;
 
     private LineRenderer lineRenderer;
 
@@ -26,59 +35,65 @@ public class CircularTextureRenderer : MonoBehaviour
 
     private void Start()
     {
-        DrawCircle();
+        DrawArc();
     }
 
-    // Permite ver los cambios en el editor en tiempo real
     private void OnValidate()
     {
-        if (lineRenderer == null) 
+        if (lineRenderer == null)
             lineRenderer = GetComponent<LineRenderer>();
-            
-        DrawCircle();
+
+        DrawArc();
     }
 
     private void InitializeLineRenderer()
     {
-        lineRenderer = GetComponent<LineRenderer>();
-        
-        // Regla 3 & 4: Configuración inicial vía código para evitar errores manuales
+        if (lineRenderer == null)
+            lineRenderer = GetComponent<LineRenderer>();
+
         lineRenderer.useWorldSpace = false;
-        lineRenderer.loop = true;
-        
-        // CRITICAL: This allows the texture to repeat instead of stretch
-        lineRenderer.textureMode = LineTextureMode.Tile; 
+        lineRenderer.loop = false;
+
+        // Ensure texture repeats instead of clamping
+        lineRenderer.textureMode = LineTextureMode.Tile;
     }
 
-    private void DrawCircle()
+    private void DrawArc()
     {
         if (lineRenderer == null) return;
 
-        // Apply width settings
+        // 1. Update Width
         lineRenderer.startWidth = lineWidth;
         lineRenderer.endWidth = lineWidth;
 
-        // Apply material tiling logic
-        // We update the material's texture scale to control repetition
-        if (lineRenderer.sharedMaterial != null)
+        // 2. Update Texture Tiling (X = Length, Y = Height/Thickness)
+        // NOTE: Modifying sharedMaterial in Editor affects the asset. 
+        // For runtime instances, you might want to use .material instead.
+        Material targetMat = Application.isPlaying ? lineRenderer.material : lineRenderer.sharedMaterial;
+
+        if (targetMat != null)
         {
-            lineRenderer.sharedMaterial.mainTextureScale = new Vector2(textureTilingMultiplier, 1f);
+            targetMat.mainTextureScale = new Vector2(textureTilingX, textureTilingY);
         }
 
-        // Generate geometry
-        lineRenderer.positionCount = segments;
-        float angleStep = 360f / segments;
+        // 3. Calculate Geometry
+        int pointCount = segments + 1;
+        lineRenderer.positionCount = pointCount;
 
-        for (int i = 0; i < segments; i++)
+        float currentAngle = startAngle;
+        float angleDifference = endAngle - startAngle;
+        float angleStep = angleDifference / segments;
+
+        for (int i = 0; i < pointCount; i++)
         {
-            float angle = i * angleStep * Mathf.Deg2Rad;
-            float x = Mathf.Cos(angle) * radius;
-            float z = Mathf.Sin(angle) * radius; // Using Z for horizontal circle (XZ plane)
+            float rad = currentAngle * Mathf.Deg2Rad;
 
-            // If you need a vertical circle (XY plane), swap z with y:
-            // lineRenderer.SetPosition(i, new Vector3(x, z, 0f));
-            
-            lineRenderer.SetPosition(i, new Vector3(x, z, 0));
-        }
-    }
+            float x = Mathf.Cos(rad) * radius;
+            float y = Mathf.Sin(rad) * radius;
+
+            lineRenderer.SetPosition(i, new Vector3(x, y, 0f));
+
+            currentAngle += angleStep;
+        }
+    }
 }

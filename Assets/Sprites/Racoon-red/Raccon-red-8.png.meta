@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 3cf40a8022cb0504ba05292aa9770bca
+guid: bf5e54f5865139e4b83557d89dbd9b11
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 211814887845782273
-    second: Arena_nueva_0
+      213: 7903192115053819810
+    second: Raccon-red-8_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,12 +113,12 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Arena_nueva_0
+      name: Raccon-red-8_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 128
+        x: 1
+        y: 3
+        width: 126
         height: 124
       alignment: 0
       pivot: {x: 0, y: 0}
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 103ef2ca48480f200800000000000000
-      internalID: 211814887845782273
+      spriteID: 2a773711b57cdad60800000000000000
+      internalID: 7903192115053819810
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Arena_nueva_0: 211814887845782273
+      Raccon-red-8_0: 7903192115053819810
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

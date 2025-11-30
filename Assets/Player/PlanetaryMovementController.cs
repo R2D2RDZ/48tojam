@@ -30,26 +30,19 @@ public class PlanetaryMovementController : NetworkBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
 
-        // IMPORTANTE: Desactivamos la gravedad estándar de Unity para usar la nuestra radial.
+        // Desactivamos gravedad global
         rb.gravityScale = 0f;
-
-        // Congelamos la rotación física para controlarla nosotros manualmente.
         rb.constraints = RigidbodyConstraints2D.FreezeRotation;
     }
 
     private void Update()
     {
-        // 1. Regla de Oro: Solo el dueño controla su input
         if (!IsOwner) return;
-
         HandleInput();
     }
 
     private void FixedUpdate()
     {
-        // 2. Las físicas corren en el dueño y se replican vía NetworkTransform
-        // O si es ServerAuth, esto debería correr en el Servidor. 
-        // Asumimos ClientAuth (NetworkTransform estándar) para respuesta inmediata.
         if (!IsOwner) return;
 
         ApplyGravity();
@@ -60,10 +53,31 @@ public class PlanetaryMovementController : NetworkBehaviour
 
     private void HandleInput()
     {
+        // 1. Obtener Input de Teclado (WASD/Flechas)
         float x = Input.GetAxisRaw("Horizontal");
+
+        // 2. Obtener Input Táctil (Si existe el Manager)
+        if (TouchInputManager.Instance != null)
+        {
+            // Sumamos el input táctil. 
+            // Si presionas 'D' (1) y botón Izquierda (-1), se cancelan (0), lo cual es correcto.
+            x += TouchInputManager.Instance.HorizontalInput;
+        }
+
+        // Clampeamos entre -1 y 1 para evitar doble velocidad si se usan ambos a la vez
+        x = Mathf.Clamp(x, -1f, 1f);
+
         inputVector = new Vector2(x, 0);
 
-        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
+        // 3. Lógica de Salto (Teclado O Botón UI)
+        bool jumpInput = Input.GetKeyDown(KeyCode.Space);
+
+        if (TouchInputManager.Instance != null && TouchInputManager.Instance.JumpTriggered)
+        {
+            jumpInput = true;
+        }
+
+        if (jumpInput && isGrounded)
         {
             jumpRequest = true;
         }
@@ -71,37 +85,27 @@ public class PlanetaryMovementController : NetworkBehaviour
 
     private void ApplyGravity()
     {
-        // Calculamos la dirección hacia el centro (0,0)
         Vector2 directionToCenter = (Vector2.zero - rb.position).normalized;
-
-        // Aplicamos fuerza constante hacia el centro
         rb.AddForce(directionToCenter * gravityStrength);
     }
 
     private void AlignToPlanet()
     {
-        // Calculamos el vector que va del centro al jugador (Arriba relativo)
         Vector2 directionFromCenter = rb.position - Vector2.zero;
-
-        // Calculamos el ángulo en grados para rotar el sprite
-        // -90 es un ajuste común porque Atan2 asume 0 grados a la derecha (eje X)
         float angle = Mathf.Atan2(directionFromCenter.y, directionFromCenter.x) * Mathf.Rad2Deg - 90f;
 
-        // Aplicamos la rotación suavemente (aunque FixedUpdate es rápido, Lerp ayuda visualmente)
-        // Usamos MoveTowardsAngle para evitar giros locos de 360 grados
         float currentAngle = transform.rotation.eulerAngles.z;
-        float newAngle = Mathf.MoveTowardsAngle(currentAngle, angle, 360f * Time.fixedDeltaTime); // Rotación instantánea pero limpia
+        float newAngle = Mathf.MoveTowardsAngle(currentAngle, angle, 360f * Time.fixedDeltaTime);
 
         rb.rotation = newAngle;
     }
 
     private void CheckGround()
     {
-        // Lanzamos un rayo desde el jugador hacia el centro del planeta
         Vector2 directionToCenter = (Vector2.zero - rb.position).normalized;
 
-        // Debug visual del rayo
-        Debug.DrawRay(transform.position, directionToCenter * groundCheckDistance, Color.red);
+        // Debug visual
+        // Debug.DrawRay(transform.position, directionToCenter * groundCheckDistance, Color.red);
 
         RaycastHit2D hit = Physics2D.Raycast(transform.position, directionToCenter, groundCheckDistance, groundLayer);
         isGrounded = hit.collider != null;
@@ -109,26 +113,17 @@ public class PlanetaryMovementController : NetworkBehaviour
 
     private void ApplyMovement()
     {
-        // 1. Obtener la velocidad actual del objeto
-        Vector2 currentVelocity = rb.linearVelocity; // Unity 6 API (antes rb.velocity)
-
-        // 2. Convertir esa velocidad global a local relativa al jugador
-        // transform.InverseTransformDirection convierte un vector del mundo a coordenadas locales del objeto
+        Vector2 currentVelocity = rb.linearVelocity;
         Vector2 localVelocity = transform.InverseTransformDirection(currentVelocity);
 
-        // 3. Sobrescribir SOLO la velocidad en X (movimiento lateral)
-        // Mantenemos la velocidad en Y (caída/gravedad) intacta
         localVelocity.x = inputVector.x * moveSpeed;
 
-        // 4. Lógica de Salto
         if (jumpRequest)
         {
-            // Añadimos velocidad instantánea hacia arriba (eje Y local)
             localVelocity.y = jumpForce;
             jumpRequest = false;
         }
 
-        // 5. Convertir de nuevo a velocidad global y aplicar
         rb.linearVelocity = transform.TransformDirection(localVelocity);
     }
 }
