@@ -1,6 +1,7 @@
 using UnityEngine;
-using UnityEngine.UI; 
-using TMPro; // NECESARIO para el tipo TMP_Text
+using TMPro;
+using System.Collections; 
+using UnityEngine.UI;
 
 public class ControladorOrbital : MonoBehaviour
 {
@@ -18,9 +19,11 @@ public class ControladorOrbital : MonoBehaviour
     // --- Variables de Recolección ---
     [Header("Configuración de Recolección")]
     public string tagDelMaterial = "Material 1"; 
-    public TMP_Text contadorUIText;              
-    private int contadorMaterial = 0;          
+    public TMP_Text contadorGlobalUIText; 
+    public float duracionAnimacionGolpe = 0.2f;   
+    public float intensidadAnimacionGolpe = 0.1f; 
     
+    private int contadorMaterial = 0;          
     private Rigidbody2D rb;                
     private bool estaEnSuelo = true;       
 
@@ -34,38 +37,49 @@ public class ControladorOrbital : MonoBehaviour
         }
         
         rb.constraints = RigidbodyConstraints2D.FreezeRotation; 
-        ActualizarContadorUI(); 
+        ActualizarContadorGlobalUI(); 
+        
+        if (contadorGlobalUIText == null)
+        {
+             Debug.LogWarning("Falta asignar el Contador Global UI Text en el Cubo.");
+        }
     }
 
     void Update()
     {
-        // Lógica de Atracción Radial
-        if (centro != null)
+        // El movimiento (Atracción, Salto) solo si NO es kinemático (no está golpeando/animando).
+        if (!rb.isKinematic) 
         {
-            Vector2 direccionHaciaCentro = ((Vector2)centro.position - (Vector2)transform.position).normalized;
-            rb.AddForce(direccionHaciaCentro * fuerzaDeAtraccion);
-        }
+            // Lógica de Atracción Radial
+            if (centro != null)
+            {
+                Vector2 direccionHaciaCentro = ((Vector2)centro.position - (Vector2)transform.position).normalized;
+                rb.AddForce(direccionHaciaCentro * fuerzaDeAtraccion);
+            }
 
-        // Lógica de Salto (Input)
-        if (Input.GetKeyDown(KeyCode.Space) && estaEnSuelo)
-        {
-            Saltar(); 
+            // Lógica de Salto (Input)
+            if (Input.GetKeyDown(KeyCode.Space) && estaEnSuelo)
+            {
+                Saltar(); 
+            }
         }
     }
 
     void LateUpdate()
     {
-        // Lógica de Órbita
-        float inputHorizontal = Input.GetAxis("Horizontal"); 
-
-        if (inputHorizontal != 0 && centro != null)
+        // La órbita solo si NO es kinemático.
+        if (!rb.isKinematic)
         {
-            Vector3 puntoPivot = centro.position; 
-            float anguloARotar = inputHorizontal * velocidadDeRotacion * Time.deltaTime;
-            transform.RotateAround(puntoPivot, ejeDeRotacion, anguloARotar);
+            float inputHorizontal = Input.GetAxis("Horizontal"); 
+            if (inputHorizontal != 0 && centro != null)
+            {
+                Vector3 puntoPivot = centro.position; 
+                float anguloARotar = inputHorizontal * velocidadDeRotacion * Time.deltaTime;
+                transform.RotateAround(puntoPivot, ejeDeRotacion, anguloARotar);
+            }
         }
-
-        // Alineación Radial (Fix de Salto)
+        
+        // Alineación Radial (Siempre se ejecuta)
         if (centro != null)
         {
             Vector2 direccionDesdeCentro = (transform.position - centro.position).normalized;
@@ -74,40 +88,83 @@ public class ControladorOrbital : MonoBehaviour
         }
     }
     
-    // ===================================
-    // 3. LÓGICA DE RECOLECCIÓN (MÉTODO REINCORPORADO)
-    // ===================================
+    // LÓGICA DE INTERACCIÓN CON EL MINERAL
     void OnTriggerStay2D(Collider2D other)
     {
-        // Verifica el Tag y el Input 'Q'
-        if (other.CompareTag(tagDelMaterial))
+        if (centro == null) return;
+        
+        RecursoMineral recurso = other.GetComponent<RecursoMineral>();
+
+        if (recurso != null && other.CompareTag(tagDelMaterial))
         {
-            if (Input.GetKeyDown(KeyCode.Q))
+            // Solo pica si presionamos 'Q' y si el mineral está disponible.
+            // La comprobación de !rb.isKinematic es crucial aquí.
+            if (Input.GetKeyDown(KeyCode.Q) && !rb.isKinematic && !recurso.EstaRecargando())
             {
-                RecolectarMaterial(other.gameObject);
+                Vector3 posicionRadialInicial = transform.position - centro.position;
+                
+                // 1. Inicia la animación de OSCILACIÓN (y bloquea el movimiento)
+                StartCoroutine(AnimarGolpeRecoleccion(posicionRadialInicial));
+                
+                // 2. Llama al mineral para que inicie su contador de 4 segundos
+                recurso.IniciarPicado(this); 
             }
         }
     }
     
-    private void RecolectarMaterial(GameObject material)
+    // Corrutina para la animación de OSCILACIÓN (entra y sale radialmente)
+    private IEnumerator AnimarGolpeRecoleccion(Vector3 posicionRadialInicial)
+    {
+        // 1. Bloquear y detener el movimiento físico
+        rb.linearVelocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+        rb.isKinematic = true; // ⬅️ CRUCIAL: Bloquea la física para permitir la oscilación forzada
+        
+        // Asegurar la posición base antes de iniciar el ciclo
+        transform.position = centro.position + posicionRadialInicial; 
+        
+        float tiempoTranscurrido = 0f;
+        
+        while (tiempoTranscurrido < duracionAnimacionGolpe)
+        {
+            float tiempoNormalizado = tiempoTranscurrido / duracionAnimacionGolpe;
+            
+            // Crea el movimiento suave de ida y vuelta (0 -> 1 -> 0)
+            float offset = Mathf.Sin(tiempoNormalizado * Mathf.PI) * intensidadAnimacionGolpe; 
+            
+            // Multiplica el offset por la dirección radial (transform.up)
+            Vector3 offsetVector = transform.up * offset; 
+            
+            // 2. FORZAR POSICIÓN: Mueve el cubo a la posición base + la oscilación
+            transform.position = centro.position + posicionRadialInicial + offsetVector;
+
+            tiempoTranscurrido += Time.deltaTime;
+            yield return null;
+        }
+
+        // 3. Regresar a la posición exacta y devolver el control a la física
+        transform.position = centro.position + posicionRadialInicial;
+        rb.isKinematic = false; // ⬅️ DESBLOQUEO: Devuelve el control para la órbita/salto
+    }
+
+    // Este método es llamado por el MINERAL (RecursoMineral) después de cada golpe de 4s.
+    public void RecolectarCompletado()
     {
         contadorMaterial++;
-        ActualizarContadorUI();
-        Destroy(material);
+        ActualizarContadorGlobalUI();
     }
     
-    private void ActualizarContadorUI()
+    private void ActualizarContadorGlobalUI()
     {
-        if (contadorUIText != null)
+        if (contadorGlobalUIText != null)
         {
-            contadorUIText.text = contadorMaterial.ToString();
+            contadorGlobalUIText.text = "Material: " + contadorMaterial.ToString();
         }
     }
     
     private void Saltar()
     {
         Vector2 direccionDeSalto = transform.up; 
-        // CORRECCIÓN DE API: Usar rb.velocity
         rb.linearVelocity = Vector2.zero; 
         rb.AddForce(direccionDeSalto * fuerzaDeSalto, ForceMode2D.Impulse);
         estaEnSuelo = false; 
